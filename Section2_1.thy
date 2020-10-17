@@ -1,4 +1,4 @@
-theory Section2 imports Main begin
+theory Section2_1 imports Main begin
 
 section "Exercise 2.1"
 
@@ -152,4 +152,69 @@ theorem "\<exists>x. (LApp f [NatLit 1, NatLit 2, NatLit 3], x) \<in> B \<and> (
   apply(rule f_fullBetaConv)
   apply(rule g_fullBetaConv)
   done
+
+
+
+fun isFreeVar :: "var \<Rightarrow> expr \<Rightarrow> bool" where
+  isFreeVarInt_iff: "isFreeVar _ (NatLit _) = True" |
+  isFreeVarVar_iff: "isFreeVar _ (Var _) = True" |
+  isFreeVarPlus_iff: "isFreeVar v (Plus l r) = ((isFreeVar v l) \<and> (isFreeVar v r))" |
+  isFreeVarLAbs_iff: "isFreeVar v (LAbs vs b) = ((v \<notin> set vs) \<and> (isFreeVar v b))" |
+  isFreeVarLApp_iff: "isFreeVar v (LApp fn ps) = ((isFreeVar v fn) \<and> (\<forall>p \<in> set ps. isFreeVar v p))"
+
+
+theorem "isFreeVar 1 (LAbs [0] (Var 0))"
+  apply(subst isFreeVarLAbs_iff)
+  apply(intro conjI)
+  apply(simp)
+  apply(subst isFreeVarVar_iff)
+  apply(rule TrueI)
+  done
+
+
+theorem "\<not>isFreeVar 0 (LAbs [0] (Var 0))"
+  apply(auto)
+  done
+
+
+inductive_set E :: "expr set" where
+  ENatLitI: "NatLit _ \<in> E" |
+  EVarI: "Var _ \<in> E" |
+  EPlusI: "\<lbrakk> l \<in> E; r \<in> E \<rbrakk> \<Longrightarrow> Plus l r \<in> E" |
+  ELAbsI: "\<lbrakk> b \<in> E; \<forall>v \<in> set vs. isFreeVar v b \<rbrakk> \<Longrightarrow> LAbs vs b \<in> E" |
+  ELAppI: "\<lbrakk> f \<in> E; \<forall>p \<in> set ps. p \<in> E \<rbrakk> \<Longrightarrow> LApp f ps \<in> E"
+
+
+inductive_cases ELAbsE: "LAbs vs b \<in> E"
+
+
+theorem "LAbs [0] (Var 0) \<in> E"
+  apply(rule ELAbsI)
+  apply(rule EVarI)
+  apply(intro ballI)
+  apply(subst isFreeVarVar_iff)
+  apply(rule TrueI)
+  done
+
+
+lemma listSingletonI: "x \<in> set [x]"
+  apply(subst set_simps)
+  apply(rule Set.insertI1)
+  done
+
+
+theorem "(LAbs [0] (LAbs [0] (Var 0))) \<notin> E"
+  apply(rule notI)
+  apply(erule ELAbsE)
+  apply(drule_tac x=0 in bspec)
+  apply(rule listSingletonI)
+  apply(subst (asm) isFreeVarLAbs_iff)
+  apply(elim conjE)
+  apply(erule notE)
+  apply(rule listSingletonI)
+  done
+
+
+(* TODO: 練習問題の = の意味が怪しいがこれ以上\<beta>変換できない的な意味なら、それぞれがただ1つのこれ以上
+   \<beta>変換できない式をもつ的な条件を加えてあげないと存在限量の主張が題意に対して弱すぎる気がする *)
 end
