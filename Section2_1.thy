@@ -22,11 +22,15 @@ fun varSubst :: "expr \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr"
   varSubstLApp_iff: "varSubst (LApp f ps) ss = (LApp (varSubst f ss) (map (\<lambda>p. varSubst p ss) ps))"
 
 
+lemma pairConsI[intro]: "\<lbrakk> \<forall>i < length xs. zs!i = (xs!i, ys!i) \<rbrakk> \<Longrightarrow> (\<forall>i < length (x#xs). ((x, y)#zs)!i = ((x#xs)!i, (y#ys)!i))"
+  using less_Suc_eq_0_disj by auto
+
+
 inductive_set B :: "(expr \<times> expr) set" where
   BNatLitI: "(NatLit n, NatLit n) \<in> B" |
   BVarI: "(Var v, Var v) \<in> B" |
-  BPlusI: "(Plus l r, Plus l r) \<in> B" |
-  BLAbsI: "(LAbs vs b, LAbs vs b) \<in> B" |
+  BPlusI: "\<lbrakk> (l, l') \<in> B; (r, r') \<in> B \<rbrakk> \<Longrightarrow> (Plus l r, Plus l' r') \<in> B" |
+  BLAbsI: "\<lbrakk> (b, b') \<in> B \<rbrakk> \<Longrightarrow> (LAbs vs b, LAbs vs b') \<in> B" |
   BLAppI: "\<lbrakk>
     (f, LAbs vs b) \<in> B;
     length vs = length ps;
@@ -39,6 +43,7 @@ inductive_set B :: "(expr \<times> expr) set" where
 theorem "((LApp (LAbs [0] (Var 0)) [NatLit 1]), NatLit 1) \<in> B"
   apply(rule BLAppI)
   apply(rule BLAbsI)
+  apply(rule BVarI)
   apply(force)
   apply(intro allI)
   apply(intro impI)
@@ -54,6 +59,7 @@ theorem "(LApp (LApp (LAbs [0] (Var 0)) [LAbs [0] (Var 0)]) [NatLit 2], NatLit 2
   apply(rule BLAppI)
   apply(rule BLAppI)
   apply(rule BLAbsI)
+  apply(rule BVarI)
   apply(simp)
   apply(simp)
   apply(rule nth_Cons_0)
@@ -69,6 +75,22 @@ theorem "(LApp (LApp (LAbs [0] (Var 0)) [LAbs [0] (Var 0)]) [NatLit 2], NatLit 2
   done
 
 
+definition LId :: "expr" where
+  "LId \<equiv> (LAbs [0] (Var 0))"
+
+
+theorem "(LApp LId [e], e) \<in> B"
+  apply(unfold LId_def)
+  apply(rule BLAppI)
+  apply(rule BLAbsI)
+  apply(rule BVarI)
+  apply(simp)
+  apply(subgoal_tac "\<forall>i<length [0]. [(0, e)] ! i = ([0] ! i, [e] ! i)")
+  apply(assumption)
+  apply(auto)
+  done
+
+
 definition f :: "expr" where
   "f \<equiv> LAbs [0, 1, 2] (Plus (Var 0) (Plus (Var 1) (Var 2)))"
 
@@ -77,32 +99,20 @@ definition g :: "expr" where
   "g \<equiv> LAbs [0] (LAbs [1] (LAbs [2] (Plus (Var 0) (Plus (Var 1) (Var 2)))))"
 
 
-lemma append_split: "xs = xs'@[x'] \<Longrightarrow>
-    (\<forall>i. i < length xs \<longrightarrow> P i (xs!i)) =
-    (P ((length xs) - 1) x' \<and> (\<forall>i'. i' < length xs' \<longrightarrow> P i' (xs'!i')))"
-  apply(erule ssubst)
-  apply(auto)
-  apply(drule_tac x=i' in spec)
-  apply(simp add: nth_append)
-  by (metis less_antisym nth_append nth_append_length)
-
-
 lemma f_fullBetaConv: "(LApp f [NatLit 1, NatLit 2, NatLit 3], (Plus (NatLit 1) (Plus (NatLit 2) (NatLit 3)))) \<in> B"
   apply(unfold f_def)
   apply(rule BLAppI)
   apply(rule BLAbsI)
   apply(simp)
-  apply(subgoal_tac "\<forall>i<length [0, 1, 2].
-       [(0, NatLit 1), (1, NatLit 2), (2, NatLit 3)] ! i =
-       ([0, 1, 2] ! i,
-        [NatLit 1, NatLit 2, NatLit 3] ! i)")
-  apply(assumption)
-  apply(subst append_split)
+  apply(rule BPlusI)
+  apply(rule BVarI)
+  apply(rule BPlusI)
+  apply(rule BVarI)
+  apply(rule BVarI)
   apply(simp)
-  apply(subst append_split)
-  apply(simp)
-  apply(subst append_split)
-  apply(simp)
+  apply(rule pairConsI)
+  apply(rule pairConsI)
+  apply(rule pairConsI)
   apply(simp)
   apply(simp)
   apply(simp)
@@ -116,30 +126,26 @@ lemma g_fullBetaConv: "(LApp (LApp (LApp g [NatLit 1]) [NatLit 2]) [NatLit 3], (
   apply(rule BLAppI)
   apply(rule BLAbsI)
   apply(simp)
+  apply(rule BLAbsI)
+  apply(rule BLAbsI)
+  apply(rule BPlusI)
+  apply(rule BVarI)
+  apply(rule BPlusI)
+  apply(rule BVarI)
+  apply(rule BVarI)
   apply(simp)
-  apply(subgoal_tac "[(0, NatLit 1)]! 0 = (0, NatLit (Suc 0))")
-  apply(assumption)
+  apply(rule pairConsI)
+  apply(simp)
+  apply(simp)
+  apply(simp)
+  apply(simp)
+  apply(rule pairConsI)
   apply(simp)
   apply(simp)
   apply(subst varSubstLAbs_iff)
-  apply(subst varSubstLAbs_iff)
-  apply(subst varSubstPlus_iff)
-  apply(subst varSubstVarCons_iff)
-  apply(simp)
-  apply(simp)
-  apply(simp)
-  apply(subgoal_tac "[(Suc 0, NatLit 2)]!0 = (Suc 0, NatLit 2)")
-  apply(assumption)
-  apply(simp)
-  apply(simp)
-  apply(subst varSubstLAbs_iff)
-  apply(subst varSubstPlus_iff)
-  apply(subst varSubstNatLit_iff)
   apply(rule refl)
   apply(simp)
-  apply(simp)
-  apply(subgoal_tac "[(2, NatLit 3)]!0 = (2, NatLit 3)")
-  apply(assumption)
+  apply(rule pairConsI)
   apply(simp)
   apply(simp)
   apply(simp)
@@ -243,6 +249,82 @@ theorem "(LAbs [0] (LAbs [0] (Var 0))) \<notin> E"
   done
 
 
+fun betaSet :: "expr \<Rightarrow> expr set" where
+  "betaSet e = B\<^sup>+ `` {e}"
+
+
+theorem "NatLit n \<in> betaSet (NatLit n)"
+  apply(auto)
+  apply(subst trancl_unfold)
+  apply(rule UnI1)
+  apply(rule BNatLitI)
+  done
+
+
+theorem "NatLit 1 \<in> betaSet (LApp (LAbs [0] (Var 0)) [NatLit 1])"
+  apply(auto)
+  apply(subst trancl_unfold)
+  apply(rule UnI1)
+  apply(rule BLAppI)
+  apply(rule BLAbsI)
+  apply(rule BVarI)
+  apply(simp)
+  apply(rule pairConsI)
+  apply(simp)
+  apply(simp)
+  apply(simp)
+  done
+
+
+(* \<beta>簡約が2回必要なのに1回の分岐に入ったみた *)
+theorem "NatLit 1 \<in> betaSet (LApp LId [LApp LId [NatLit 1]])"
+  apply(auto)
+  apply(subst trancl_unfold)
+  apply(rule UnI1) (* \<beta>簡約1回の分岐に入る *)
+  apply(rule BLAppI)
+  apply(unfold LId_def)
+  apply(rule BLAbsI)
+  apply(rule BVarI)
+  apply(simp)
+  apply(rule pairConsI)
+  apply(simp)
+  apply(simp)
+  apply(simp)
+  (* goal: False *)
+  oops
+  
+
+theorem "NatLit 1 \<in> betaSet (LApp LId [LApp LId [NatLit 1]])"
+  apply(auto)
+  apply(subst trancl_unfold)
+  apply(rule UnI2) (* \<beta>簡約1回のルートを避ける *)
+  apply(rule relcomp.relcompI)
+  apply(subst trancl_unfold)
+  apply(rule UnI1) (* \<beta>簡約2回のルートへ入る *)
+  apply(rule BLAppI)
+  apply(unfold LId_def)
+  apply(rule BLAbsI)
+  apply(rule BVarI)
+  apply(simp)
+  apply(rule pairConsI)
+  apply(simp)
+  apply(simp)
+  apply(rule refl)
+  apply(subst varSubstVarCons_iff)
+  apply(simp)
+  apply(rule BLAppI)
+  apply(rule BLAbsI)
+  apply(rule BVarI)
+  apply(simp)
+  apply(rule pairConsI)
+  apply(simp)
+  apply(simp)
+  apply(simp)
+  done
+
+
 (* TODO: 練習問題の = の意味が怪しいがこれ以上\<beta>変換できない的な意味なら、それぞれがただ1つのこれ以上
    \<beta>変換できない式をもつ的な条件を加えてあげないと存在限量の主張が題意に対して弱すぎる気がする *)
+theorem "\<lbrakk> e \<in> E \<rbrakk> \<Longrightarrow> \<exists>e' \<in> betaSet e. {e'} = betaSet e'"
+  oops
 end
