@@ -155,45 +155,73 @@ theorem "\<exists>x. (LApp f [NatLit 1, NatLit 2, NatLit 3], x) \<in> B \<and> (
 
 
 
-fun isFreeVar :: "var \<Rightarrow> expr \<Rightarrow> bool" where
-  isFreeVarInt_iff: "isFreeVar _ (NatLit _) = True" |
-  isFreeVarVar_iff: "isFreeVar _ (Var _) = True" |
-  isFreeVarPlus_iff: "isFreeVar v (Plus l r) = ((isFreeVar v l) \<and> (isFreeVar v r))" |
-  isFreeVarLAbs_iff: "isFreeVar v (LAbs vs b) = ((v \<notin> set vs) \<and> (isFreeVar v b))" |
-  isFreeVarLApp_iff: "isFreeVar v (LApp fn ps) = ((isFreeVar v fn) \<and> (\<forall>p \<in> set ps. isFreeVar v p))"
+fun vars :: "expr \<Rightarrow> var set" where
+  varsNarLit_iff: "vars (NatLit _) = {}" |
+  varsVar_iff: "vars (Var v) = {v}" |
+  varsPlus_iff: "vars (Plus l r) = vars l \<union> vars r" |
+  varsLAbs_iff: "vars (LAbs as b) = vars b \<union> set as" |
+  varsLApp_iff: "vars (LApp fn ps) = vars fn \<union> (\<Union> (vars ` set ps))"
 
 
-theorem "isFreeVar 1 (LAbs [0] (Var 0))"
-  apply(subst isFreeVarLAbs_iff)
-  apply(intro conjI)
+fun fv :: "expr \<Rightarrow> var set" where
+  fvNatLit_iff: "fv (NatLit _) = {}" |
+  fvVar_iff: "fv (Var v) = {v}" |
+  fvPlus_iff: "fv (Plus l r) = (fv l) \<union> (fv r)" |
+  fvLAbs_iff: "fv (LAbs vs b) = (fv b) - (set vs)" |
+  fvLApp_iff: "fv (LApp fn as) = (fv fn) \<union> (\<Union> (fv ` set as))"
+
+
+theorem "0 \<notin> fv (LAbs [0] (Var 0))"
   apply(simp)
-  apply(subst isFreeVarVar_iff)
-  apply(rule TrueI)
   done
 
 
-theorem "\<not>isFreeVar 0 (LAbs [0] (Var 0))"
-  apply(auto)
+theorem "1 \<in> fv (LAbs [0] (Var 1))"
+  apply(simp)
   done
+
+
+theorem "0 \<in> fv (Plus (Var 0) (LApp (LAbs [0] (Var 0)) [NatLit 0]))"
+  apply(simp)
+  done
+
+
+fun closed :: "expr \<Rightarrow> bool" where
+  "closed e = (fv e = {})"
+
+
+fun binded :: "var \<Rightarrow> expr \<Rightarrow> bool" where
+  bindedNatLit_iff: "binded _ (NatLit _) = False" |
+  bindedVar_iff: "binded _ (Var _) = False" |
+  bindedPlus_iff: "binded v (Plus l r) = (binded v l \<or> binded v r)" |
+  bindedLAbs_iff: "binded v (LAbs as b) = (v \<in> set as \<or> binded v b)" |
+  bindedLApp_iff: "binded v (LApp fn ps) = (binded v fn \<or> (\<exists>p \<in> set ps. binded v p))"
 
 
 inductive_set E :: "expr set" where
   ENatLitI: "NatLit _ \<in> E" |
   EVarI: "Var _ \<in> E" |
   EPlusI: "\<lbrakk> l \<in> E; r \<in> E \<rbrakk> \<Longrightarrow> Plus l r \<in> E" |
-  ELAbsI: "\<lbrakk> b \<in> E; \<forall>v \<in> set vs. isFreeVar v b \<rbrakk> \<Longrightarrow> LAbs vs b \<in> E" |
+  ELAbsI: "\<lbrakk> b \<in> E; \<forall>v \<in> set vs. \<not>binded v b \<rbrakk> \<Longrightarrow> LAbs vs b \<in> E" |
   ELAppI: "\<lbrakk> f \<in> E; \<forall>p \<in> set ps. p \<in> E \<rbrakk> \<Longrightarrow> LApp f ps \<in> E"
 
 
 inductive_cases ELAbsE: "LAbs vs b \<in> E"
 
 
+theorem "\<lbrakk> e \<in> E \<rbrakk> \<Longrightarrow> fv e \<subseteq> vars e"
+  apply(erule E.induct)
+  apply(auto)
+  done
+
+
 theorem "LAbs [0] (Var 0) \<in> E"
   apply(rule ELAbsI)
   apply(rule EVarI)
   apply(intro ballI)
-  apply(subst isFreeVarVar_iff)
-  apply(rule TrueI)
+  apply(subst bindedVar_iff)
+  apply(rule notI)
+  apply(assumption)
   done
 
 
@@ -208,9 +236,9 @@ theorem "(LAbs [0] (LAbs [0] (Var 0))) \<notin> E"
   apply(erule ELAbsE)
   apply(drule_tac x=0 in bspec)
   apply(rule listSingletonI)
-  apply(subst (asm) isFreeVarLAbs_iff)
-  apply(elim conjE)
+  apply(subst (asm) bindedLAbs_iff)
   apply(erule notE)
+  apply(rule disjI1)
   apply(rule listSingletonI)
   done
 
